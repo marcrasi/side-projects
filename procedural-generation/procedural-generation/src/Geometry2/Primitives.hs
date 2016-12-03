@@ -11,11 +11,13 @@ type Vec3 = V3 Double
  - Embedding into R^3.
  -}
 data Vertex = Vertex Vec3
+    deriving Show
 
 {-
  - Three indices into the vector of vertices.
  -}
 data Face = Face Int Int Int
+    deriving Show
 
 {-
  - A polyhedral discrete surface.
@@ -24,6 +26,7 @@ data DiscreteSurface = DiscreteSurface
     { vertices :: Vector Vertex
     , faces :: Vector Face
     }
+    deriving Show
 
 {-
  - (0, 1) *
@@ -34,6 +37,7 @@ data DiscreteSurface = DiscreteSurface
  - (0, 0) *---------* (1, 0)
  -}
 data FaceCoordinate = FaceCoordinate Vec2
+    deriving Show
 
 {-
  - An index into the vector of faces, plus a coordinate on the face.
@@ -42,6 +46,7 @@ data SurfaceCoordinate = SurfaceCoordinate
     { face :: Int
     , faceCoordinate :: FaceCoordinate
     }
+    deriving Show
 
 {-
  - A discrete field of quantities of type `a` on a face.
@@ -56,9 +61,10 @@ data FaceField a = FaceField
     { values :: Vector a
     , fineness :: Int
     }
+    deriving Show
 
 {-
  - One FaceField per face.
  -}
 data SurfaceField a = SurfaceField (Vector (FaceField a))
-
+    deriving Show
