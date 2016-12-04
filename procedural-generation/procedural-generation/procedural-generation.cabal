@@ -23,6 +23,7 @@ library
                      , linear
                      , vector
                      , GLUT
+                     , containers
   default-language:    Haskell2010
 
 executable procedural-generation-exe
@@ -34,6 +35,7 @@ executable procedural-generation-exe
                      , linear
                      , vector
                      , GLUT
+                     , containers
   default-language:    Haskell2010
 
 test-suite procedural-generation-test
@@ -42,6 +44,10 @@ test-suite procedural-generation-test
   main-is:             Spec.hs
   build-depends:       base
                      , procedural-generation
+                     , QuickCheck 
+                     , tasty
+                     , tasty-quickcheck
+                     , linear
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

@@ -1,2 +1,8 @@
+import Test.Tasty
+
+import Tests.Geometry2.Primitives (tests)
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = defaultMain $ testGroup "Tests"
+  [ Tests.Geometry2.Primitives.tests
+  ]

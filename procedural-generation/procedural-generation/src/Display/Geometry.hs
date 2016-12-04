@@ -10,6 +10,7 @@ import Graphics.UI.GLUT
 
 import Geometry2.Primitives
   ( DiscreteSurface(DiscreteSurface)
+  , VertexIndex(VertexIndex)
   , Vertex(Vertex)
   , Face(Face)
   , FaceField(FaceField)
@@ -52,10 +53,10 @@ checkers = FaceField
   }
 
 displayDiscreteSurface :: DiscreteSurface -> TextureObject -> DisplayCallback
-displayDiscreteSurface (DiscreteSurface vertices faces) textureName = do
+displayDiscreteSurface (DiscreteSurface vertices _ faces _ _) textureName = do
   mapM_ displayFace faces
   where
-    displayFace (Face a b c) = do
+    displayFace (Face (VertexIndex a) (VertexIndex b) (VertexIndex c)) = do
       let Vertex va = vertices ! a
       let Vertex vb = vertices ! b
       let Vertex vc = vertices ! c
