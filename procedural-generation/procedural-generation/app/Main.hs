@@ -7,4 +7,6 @@ import qualified Display as Display
 import qualified Display.Geometry as DisplayGeometry
 
 main :: IO ()
-main = Display.doDisplay $ DisplayGeometry.displayDiscreteSurface DiscreteSurfaces.cube 
+main = do
+  textureName <- DisplayGeometry.prepareTexture DisplayGeometry.checkers
+  Display.doDisplay $ DisplayGeometry.displayDiscreteSurface DiscreteSurfaces.cube textureName

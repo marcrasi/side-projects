@@ -35,6 +35,13 @@ myInit = do
   materialSpecular Front $= Color4 0 0 0 1
   materialShininess Front $= 0
 
+  rowAlignment Unpack $= 1
+
+  exts <- get glExtensions
+  if "GL_EXT_texture_object" `elem` exts
+    then putStrLn "It's there!"
+    else putStrLn "It's not there :("
+
 rotateDisplay :: State -> DisplayCallback -> DisplayCallback
 rotateDisplay state dcb = do
   clear [ ColorBuffer, DepthBuffer ]
