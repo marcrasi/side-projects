@@ -19,13 +19,13 @@ import Geometry2.Primitives
 
 prepareTexture :: FaceField (Color4 GLubyte) -> IO TextureObject
 prepareTexture (FaceField values _) = do
-  [textureName] <- genObjectNames 1
+  textureName <- genObjectName
   textureBinding Texture2D $= Just textureName
   textureWrapMode Texture2D S $= (Repeated, Repeat)
   textureWrapMode Texture2D T $= (Repeated, Repeat)
   textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
-  print values
-  textureFunction $= Decal
+  errs0 <- get errors
+  print errs0
   withArray (toList values) $ (texImage2D Texture2D NoProxy 0 RGBA' (TextureSize2D 64 64) 0) . (PixelData RGBA UnsignedByte)
   errs <- get errors
   print errs
@@ -41,13 +41,13 @@ prepareTexture (FaceField values _) = do
 checkers :: FaceField (Color4 GLubyte)
 checkers = FaceField
   { values = fromList
-    [ Color4 c c c 255 |
+    [ Color4 c 0 0 255 |
       i <- [ 0 .. 63 ],
       j <- [ 0 .. 63 ],
       let
         c
-          | i `div` 10 == j `div` 10 = 0
-          | otherwise = 0 ]
+          | (i `div` 8) `mod` 2 == (j `div` 8) `mod` 2 = 0
+          | otherwise = 255 ]
   , fineness = 100
   }
 
@@ -59,19 +59,19 @@ displayDiscreteSurface (DiscreteSurface vertices faces) textureName = do
       let Vertex va = vertices ! a
       let Vertex vb = vertices ! b
       let Vertex vc = vertices ! c
+      texture Texture2D $= Enabled
+      textureFunction $= Modulate
+      textureBinding Texture2D $= Just textureName
       renderPrimitive Polygon $ do
-        texture Texture2D $= Enabled
-        textureFunction $= Decal
-        textureBinding Texture2D $= Just textureName
         setNormal va vb vc
-        vertex3f va
         texCoord $ TexCoord2 0 (0 :: GLfloat)
-        vertex3f vb
+        vertex3f va
         texCoord $ TexCoord2 1 (0 :: GLfloat)
-        vertex3f vc
+        vertex3f vb
         texCoord $ TexCoord2 0 (1 :: GLfloat)
-        texture Texture2D $= Disabled
-      return ()
+        vertex3f vc
+      texture Texture2D $= Disabled
+      flush
 
     vertex3f (V3 vx vy vz) = vertex $ Vertex3 vx vy vz
 

@@ -26,7 +26,7 @@ myInit = do
   ambient (Light 0) $= Color4 0.5 0.5 0.5 1
   diffuse (Light 0) $= Color4 1 1 1 1
   light (Light 0) $= Enabled
-  position (Light 0) $= Vertex4 1 1 1 0
+  position (Light 0) $= Vertex4 0 0 0 0
   lightModelTwoSide $= Enabled
   depthFunc $= Just Less
 
@@ -34,6 +34,11 @@ myInit = do
   materialDiffuse Front $= Color4 1 1 1 1
   materialSpecular Front $= Color4 0 0 0 1
   materialShininess Front $= 0
+  materialAmbient Back $= Color4 1 1 1 1
+  materialDiffuse Back $= Color4 1 1 1 1
+  materialSpecular Back $= Color4 0 0 0 1
+  materialShininess Back $= 0
+
 
   rowAlignment Unpack $= 1
 
@@ -41,6 +46,7 @@ myInit = do
   if "GL_EXT_texture_object" `elem` exts
     then putStrLn "It's there!"
     else putStrLn "It's not there :("
+  print exts
 
 rotateDisplay :: State -> DisplayCallback -> DisplayCallback
 rotateDisplay state dcb = do
@@ -70,15 +76,18 @@ keyboard state (Char c) Down _ _ = case c of
       postRedisplay Nothing
 keyboard _ _ _ _ _ = return ()
 
-doDisplay :: DisplayCallback -> IO ()
-doDisplay dcb = do
+doInitialize :: IO ()
+doInitialize = do
   _ <- getArgsAndInitialize
   initialDisplayMode $= [ DoubleBuffered, RGBMode, WithDepthBuffer ]
   initialWindowSize $= Size 500 500
   initialWindowPosition $= Position 100 100
   _ <- createWindow "Procedural Generation Display"
-  state <- makeState
   myInit
+
+doDisplay :: DisplayCallback -> IO ()
+doDisplay dcb = do
+  state <- makeState
   displayCallback $= (rotateDisplay state dcb)
   keyboardMouseCallback $= Just (keyboard state)
   mainLoop
