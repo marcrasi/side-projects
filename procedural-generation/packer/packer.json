@@ -32,7 +32,9 @@
       "sudo apt-get update && sudo apt-get install stack -y",
 
       "sudo debconf-set-selections <<< \"keyboard-configuration  keyboard-configuration/variant  select  English (US)\"",
-      "sudo apt-get install xorg vim-gtk -y"
+      "sudo apt-get install xorg vim-gtk -y",
+
+      "sudo apt-get install mesa-common-dev freeglut3-dev -y"
     ]
   }]
 }

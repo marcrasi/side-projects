@@ -15,10 +15,14 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     ArrayBuilder
-                     , Geometry2
+  exposed-modules:     Geometry2.DiscreteSurfaces
+                     , Geometry2.Primitives
+                     , Display.Geometry
+                     , Display
   build-depends:       base >= 4.7 && < 5
-                     , array
+                     , linear
+                     , vector
+                     , GLUT
   default-language:    Haskell2010
 
 executable procedural-generation-exe
@@ -27,7 +31,9 @@ executable procedural-generation-exe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , procedural-generation
-                     , array
+                     , linear
+                     , vector
+                     , GLUT
   default-language:    Haskell2010
 
 test-suite procedural-generation-test
