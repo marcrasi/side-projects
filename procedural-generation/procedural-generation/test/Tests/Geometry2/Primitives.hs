@@ -18,50 +18,81 @@ import Instances.Linear ()
 import Geometry2.Primitives
 
 tests = testGroup "Primitives"
-  [ testGroup "canonicalize"
-    [ testProperty "canonicalize_origin" canonicalize_origin
-    , testProperty "canonicalize_posXAxis" canonicalize_posXAxis
-    , testProperty "canonicalize_posYPlane" canonicalize_posYPlane
-    , testProperty "canonicalize_preservesDistance" canonicalize_preservesDistance
+  [ testGroup "makeCoordinateTransform"
+    [ testProperty "makeCoordinateTransform_inverse_1" makeCoordinateTransform_inverse_1
+    , testProperty "makeCoordinateTransform_inverse_2" makeCoordinateTransform_inverse_2
+    , testProperty "makeCoordinateTransform_toFace_origin" makeCoordinateTransform_toFace_origin
+    , testProperty "makeCoordinateTransform_toFace_posXAxis" makeCoordinateTransform_toFace_posXAxis
+    , testProperty "makeCoordinateTransform_toFace_posYPlane" makeCoordinateTransform_toFace_posYPlane
+    , testProperty "makeCoordinateTransform_toFace_isometric" makeCoordinateTransform_toFace_isometric
     ]
-  , testGroup "canonicalizeFace"
-    [ testProperty "canonicalizeFace_correctlyBounded" canonicalizeFace_correctlyBounded
+  , testGroup "canonicalCoordinateTransform"
+    [ testProperty "canonicalCoordinateTransform_correctlyBounded" canonicalCoordinateTransform_correctlyBounded
     ]
   ]
 
 colinear :: V3 Double -> V3 Double -> V3 Double -> Bool
-colinear a b c = (det33 $ V3 p q r) < 0.001
+colinear a b c = (det33 $ V3 p q r) < 1e-3
   where
     p = b - a
     q = c - a
     r = cross p q
 
-canonicalize_origin origin posXAxis posYPlane =
-  (not $ colinear origin posXAxis posYPlane) ==>
-    canonicalize origin posXAxis posYPlane origin === V2 0 0
+onFacePlane :: Vec3 -> Vec3 -> Vec3 -> Double -> Double -> Vec3
+onFacePlane a b c s t = s *^ (b - a) + t *^ (c - a) + a
 
-canonicalize_posXAxis origin posXAxis posYPlane =
-  (not $ colinear origin posXAxis posYPlane) ==>
-    closeMetrics
-      (canonicalize origin posXAxis posYPlane posXAxis)
-      (V2 (distance origin posXAxis) 0)
+makeCoordinateTransform' a b c =
+  makeCoordinateTransform
+    (IndexedVertex (VertexIndex 0) (Vertex a))
+    (IndexedVertex (VertexIndex 1) (Vertex b))
+    (IndexedVertex (VertexIndex 2) (Vertex c))
 
-canonicalize_posYPlane origin posXAxis posYPlane =
+makeCoordinateTransform_inverse_1 origin posXAxis posYPlane s t =
+  (not $ colinear origin posXAxis posYPlane) ==>
+    closeMetrics (toAmbient transform $ toFace transform v) v
+  where
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+    v = onFacePlane origin posXAxis posYPlane s t
+
+makeCoordinateTransform_inverse_2 origin posXAxis posYPlane v =
+  (not $ colinear origin posXAxis posYPlane) ==>
+    closeMetrics (toFace transform $ toAmbient transform v) v
+  where
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+
+makeCoordinateTransform_toFace_origin origin posXAxis posYPlane =
+  (not $ colinear origin posXAxis posYPlane) ==>
+    closeMetrics (toFace transform origin) (V2 0 0)
+  where
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+
+makeCoordinateTransform_toFace_posXAxis origin posXAxis posYPlane =
+  (not $ colinear origin posXAxis posYPlane) ==>
+    closeMetrics (toFace transform posXAxis) (V2 (distance origin posXAxis) 0)
+  where
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+
+makeCoordinateTransform_toFace_posYPlane origin posXAxis posYPlane =
   (not $ colinear origin posXAxis posYPlane) ==> y > 0
   where
-    V2 x y = canonicalize origin posXAxis posYPlane posYPlane
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+    V2 _ y = toFace transform posYPlane
 
-canonicalize_preservesDistance a b c ta1 tb1 ta2 tb2 =
-  (not $ colinear a b c) ==> closeDoubles originalDistance transformedDistance
+makeCoordinateTransform_toFace_isometric origin posXAxis posYPlane s1 t1 s2 t2 =
+  (not $ colinear origin posXAxis posYPlane) ==>
+    closeDoubles (distance (toFace transform v1) (toFace transform v2)) (distance v1 v2)
   where
-    v1 = ta1 *^ a + tb1 *^ b + (1 - ta1 - tb1) *^ c
-    v2 = ta2 *^ a + tb2 *^ b + (1 - ta2 - tb2) *^ c
-    originalDistance = distance v1 v2
-    transformedDistance = distance (canonicalize a b c v1) (canonicalize a b c v2)
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+    v1 = onFacePlane origin posXAxis posYPlane s1 t1
+    v2 = onFacePlane origin posXAxis posYPlane s2 t2
 
--- TODO: need to rethink where I can do exact comparisons and where not,
--- because I want to actually be sure that 0 <= x2 <= x1
-canonicalizeFace_correctlyBounded a b c =
+makeCoordinateTransform_toAmbient_isometric origin posXAxis posYPlane v1 v2 =
+  (not $ colinear origin posXAxis posYPlane) ==>
+    closeDoubles (distance (toAmbient transform v1) (toAmbient transform v2)) (distance v1 v2)
+  where
+    transform = makeCoordinateTransform' origin posXAxis posYPlane
+
+canonicalCoordinateTransform_correctlyBounded a b c =
   (not $ colinear a b c) ==>
     conjoin
       [ counterexample ("x1: " ++ show x1 ++ " < 0") (x1 >= (-epsilon))
@@ -75,17 +106,22 @@ canonicalizeFace_correctlyBounded a b c =
       , counterexample ("x3: " ++ show x3 ++ " > xmax (" ++ show xmax ++ ")") (x3 <= xmax + epsilon)
       ]
   where
-    epsilon = 0.00001
-    face = EmbeddedFace (Vertex a) (Vertex b) (Vertex c)
-    V2 x1 y1 = canonicalizeFace face a
-    V2 x2 y2 = canonicalizeFace face b
-    V2 x3 y3 = canonicalizeFace face c
+    epsilon = 1e-6
+    face =
+      EmbeddedFace
+        (IndexedVertex (VertexIndex 0) (Vertex a))
+        (IndexedVertex (VertexIndex 1) (Vertex b))
+        (IndexedVertex (VertexIndex 2) (Vertex c))
+    transform = canonicalCoordinateTransform face
+    V2 x1 y1 = toFace transform a
+    V2 x2 y2 = toFace transform b
+    V2 x3 y3 = toFace transform c
     (xmax, _) = head $ dropWhile (not . (\(x, y) -> x > 0 && y < epsilon)) [(x1, y1), (x2, y2), (x3, y3)]
 
 closeDoubles :: Double -> Double -> Property
 closeDoubles a b =
-  counterexample (show a ++ " /~ " ++ show b) ((abs $ a - b) < 0.001)
+  counterexample (show a ++ " /~ " ++ show b) ((abs $ a - b) < 1e-6)
 
 closeMetrics :: (Metric f, Floating a, Ord a, Show (f a)) => f a -> f a -> Property
 closeMetrics v1 v2 =
-  counterexample (show v1 ++ " /~ " ++ show v2) (distance v1 v2 < 0.001)
+  counterexample (show v1 ++ " /~ " ++ show v2) (distance v1 v2 < 1e-6)

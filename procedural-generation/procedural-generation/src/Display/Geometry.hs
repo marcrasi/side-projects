@@ -53,7 +53,7 @@ checkers = FaceField
   }
 
 displayDiscreteSurface :: DiscreteSurface -> TextureObject -> DisplayCallback
-displayDiscreteSurface (DiscreteSurface vertices _ faces _ _) textureName = do
+displayDiscreteSurface (DiscreteSurface vertices _ faces _ _ _ _) textureName = do
   mapM_ displayFace faces
   where
     displayFace (Face (VertexIndex a) (VertexIndex b) (VertexIndex c)) = do
