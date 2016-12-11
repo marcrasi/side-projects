@@ -32,4 +32,15 @@ cube = makeDiscreteSurface vertices faces
       (mkFaces 2 6 7 3) ++
       (mkFaces 0 1 5 4))
 
+square :: DiscreteSurface
+square = makeDiscreteSurface vertices faces
+  where
+    vertices = fromList
+      [ Vertex $ V3 0 0 0
+      , Vertex $ V3 1 0 0
+      , Vertex $ V3 1 1 0
+      , Vertex $ V3 0 1 0
+      ]
+    faces = fromList $ mkFaces 0 1 2 3
+
 mkFaces a b c d = [Face (VertexIndex a) (VertexIndex b) (VertexIndex c), Face (VertexIndex a) (VertexIndex c) (VertexIndex d)]

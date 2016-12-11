@@ -30,11 +30,17 @@ data VertexIndex = VertexIndex Int
 data IndexedVertex = IndexedVertex VertexIndex Vertex
   deriving (Show)
 
+getVertexIndex :: IndexedVertex -> VertexIndex
+getVertexIndex (IndexedVertex i _) = i
+
 data FaceIndex = FaceIndex Int
   deriving (Eq, Ord, Show)
 
-data EdgeIndex = EdgeIndex Int
+data Edge = Edge VertexIndex VertexIndex
   deriving (Eq, Ord, Show)
+
+makeEdge :: IndexedVertex -> IndexedVertex -> Edge
+makeEdge (IndexedVertex i1 _) (IndexedVertex i2 _) = Edge i1 i2
 
 data Face = Face VertexIndex VertexIndex VertexIndex
   deriving Show
@@ -42,44 +48,43 @@ data Face = Face VertexIndex VertexIndex VertexIndex
 data EmbeddedFace = EmbeddedFace IndexedVertex IndexedVertex IndexedVertex
   deriving Show
 
-data Edge = Edge VertexIndex VertexIndex
-  deriving Show
-
 {-
  - A polyhedral discrete surface.
  -}
 data DiscreteSurface = DiscreteSurface
     { vertices :: Vector Vertex
-    , edges :: Vector Edge
     , faces :: Vector Face
     , embeddedFaces :: Vector EmbeddedFace
     , coordinateTransforms :: Vector CoordinateTransform
-    , vertexToEdges :: Map.Map VertexIndex [EdgeIndex]
     , vertexToFaces :: Map.Map VertexIndex [FaceIndex]
+    , edgeToFaces :: Map.Map Edge [FaceIndex]
     }
   deriving Show
 
 makeDiscreteSurface :: Vector Vertex -> Vector Face -> DiscreteSurface
 makeDiscreteSurface vertices faces = DiscreteSurface
   { vertices = vertices
-  , edges = edges
   , faces = faces
   , embeddedFaces = embeddedFaces
   , coordinateTransforms = coordinateTransforms
-  , vertexToEdges = vertexToEdges
   , vertexToFaces = vertexToFaces
+  , edgeToFaces = edgeToFaces
   }
   where
-    edges = fromList $ concatMap (\(Face a b c) -> [Edge a b, Edge b c, Edge c a]) $ toList faces
     embeddedFaces = fromList $ map (makeEmbeddedFace vertices) $ toList faces
     coordinateTransforms = fromList $ map canonicalCoordinateTransform $ toList embeddedFaces
-    indexedEdges = zipWith (\index edge -> (EdgeIndex index, edge)) [0..] $ toList edges
     indexedFaces = zipWith (\index face -> (FaceIndex index, face)) [0..] $ toList faces
-    vertexToEdges = Map.fromListWith (++) $ concatMap (\(index, (Edge a b)) -> [(a, [index]), (b, [index])]) indexedEdges
     vertexToFaces = Map.fromListWith (++) $ concatMap (\(index, (Face a b c)) -> [(a, [index]), (b, [index]), (c, [index])]) indexedFaces
+    edgeToFaces = Map.fromListWith (++) $ concatMap (\(index, (Face a b c)) -> [(Edge a b, [index]), (Edge b a, [index]), (Edge b c, [index]), (Edge c b, [index]), (Edge a c, [index]), (Edge c a, [index])]) indexedFaces
 
 lookupVertex :: Vector Vertex -> VertexIndex -> Vertex
 lookupVertex vertices (VertexIndex i) = vertices ! i
+
+lookupFace :: Vector Face -> FaceIndex -> Face
+lookupFace faces (FaceIndex i) = faces ! i
+
+lookupCoordinateTransform :: Vector CoordinateTransform -> FaceIndex -> CoordinateTransform
+lookupCoordinateTransform coordinateTransforms (FaceIndex i) = coordinateTransforms ! i
 
 makeEmbeddedFace :: Vector Vertex -> Face -> EmbeddedFace
 makeEmbeddedFace vertices (Face a b c) =
@@ -195,43 +200,11 @@ data SurfaceCoordinate = SurfaceCoordinate
   }
   deriving Show
 
--- Returns `t > 0` such that `start + t * direction` hits the line.
--- Returns +Inf if `start + t * direction (t > 0)` never hits the line.
--- TODO: I should also make this only "detect" intersections where you're
--- leaving the enclosure, so that if I start slightly outside then I'll
--- still get reasonable results.
-{-distanceToLine :: Vec2 -> Vec2 -> Vec2 -> Vec2 -> Double
-distanceToLine a b start direction = 0
-
--- To transform the position, simply go into ambient coordinates and then
--- back into face coordinates.
--- To transform the direction, calculate the angle between it and the edge
--- that we're leaving. Then make a new direction with the same angle away
--- from the edge that we're arriving at.
-jumpAcrossEdge :: DiscreteSurface -> SurfaceCoordinate -> Vec2 -> (SurfaceCoordinate, Vec2)
-jumpAcrossEdge surface position direction = 0
-
-advanceGeodesic :: DiscreteSurface -> SurfaceCoordinate -> Vec2 -> Double -> SurfaceCoordinate
-advanceGeodesic surface (SurfaceCoordinate (FaceIndex startFaceIndex) start) direction t =
-  if closestEdgeDistance >= t
-    then SurfaceCoordinate (FaceIndex startFaceIndex) (start + t *^ direction)
-    else advanceGeodesic surface newFaceStart newFaceDirection (t - closestEdgeDistance)
+surfaceToAmbient :: DiscreteSurface -> SurfaceCoordinate -> Vec3
+surfaceToAmbient surface (SurfaceCoordinate face faceCoordinate) =
+  toAmbient coordinateTransform faceCoordinate
   where
-    face = (faces surface) ! startFaceIndex
-    coordinateTransform = (coordinateTransforms surface) ! startFaceIndex
-    origin = V2 0 0
-
-    -- Calculate how much distance it is to each of the boundary edges.
-    e1Distance = distanceToLine origin (faceVertex1 coordinateTransform) start direction
-    e2Distance = distanceToLine origin (faceVertex2 coordinateTransform) start direction
-    e3Distance = distanceToLine (faceVertex1 coordinateTransform) (faceVertex2 coordinateTransform) start direction
-
-    -- Find the closest boundary edge.
-    (closestEdgeDistance, closestEdge) = mininumBy (\(d1, _) (d2, _) -> d1 < d2) [(e1Distance, 1), (e2Distance, 2), (e3Distance, 3)]
-
-    -- Advance to that edge and jump across it.
-    atBoundary = SurfaceCoordinate (FaceIndex startFaceIndex) (start + closestEdgeDistance *^ direction)
-    (newFaceStart, newFaceDirection) = jumpAcrossEdge surface atBoundary direction-}
+    coordinateTransform = lookupCoordinateTransform (coordinateTransforms surface) face
 
 {-
  - A discrete field of quantities of type `a` on a face.

@@ -15,6 +15,7 @@ import Linear
 
 import Instances.Linear ()
 
+import Tests.Geometry2.TestUtilities
 import Geometry2.Primitives
 
 tests = testGroup "Primitives"
@@ -30,13 +31,6 @@ tests = testGroup "Primitives"
     [ testProperty "canonicalCoordinateTransform_correctlyBounded" canonicalCoordinateTransform_correctlyBounded
     ]
   ]
-
-colinear :: V3 Double -> V3 Double -> V3 Double -> Bool
-colinear a b c = (det33 $ V3 p q r) < 1e-3
-  where
-    p = b - a
-    q = c - a
-    r = cross p q
 
 onFacePlane :: Vec3 -> Vec3 -> Vec3 -> Double -> Double -> Vec3
 onFacePlane a b c s t = s *^ (b - a) + t *^ (c - a) + a
@@ -118,10 +112,4 @@ canonicalCoordinateTransform_correctlyBounded a b c =
     V2 x3 y3 = toFace transform c
     (xmax, _) = head $ dropWhile (not . (\(x, y) -> x > 0 && y < epsilon)) [(x1, y1), (x2, y2), (x3, y3)]
 
-closeDoubles :: Double -> Double -> Property
-closeDoubles a b =
-  counterexample (show a ++ " /~ " ++ show b) ((abs $ a - b) < 1e-6)
 
-closeMetrics :: (Metric f, Floating a, Ord a, Show (f a)) => f a -> f a -> Property
-closeMetrics v1 v2 =
-  counterexample (show v1 ++ " /~ " ++ show v2) (distance v1 v2 < 1e-6)
