@@ -24,29 +24,13 @@ myInit = do
   shadeModel $= Smooth
   lighting $= Enabled
   ambient (Light 0) $= Color4 0.5 0.5 0.5 1
-  diffuse (Light 0) $= Color4 1 1 1 1
   light (Light 0) $= Enabled
-  position (Light 0) $= Vertex4 0 0 0 0
+  diffuse (Light 0) $= Color4 1 1 1 1
+  position (Light 0) $= Vertex4 10 10 0 0
   lightModelTwoSide $= Enabled
   depthFunc $= Just Less
 
-  materialAmbient Front $= Color4 1 1 1 1
-  materialDiffuse Front $= Color4 1 1 1 1
-  materialSpecular Front $= Color4 0 0 0 1
-  materialShininess Front $= 0
-  materialAmbient Back $= Color4 1 1 1 1
-  materialDiffuse Back $= Color4 1 1 1 1
-  materialSpecular Back $= Color4 0 0 0 1
-  materialShininess Back $= 0
-
-
   rowAlignment Unpack $= 1
-
-  exts <- get glExtensions
-  if "GL_EXT_texture_object" `elem` exts
-    then putStrLn "It's there!"
-    else putStrLn "It's not there :("
-  print exts
 
 rotateDisplay :: State -> DisplayCallback -> DisplayCallback
 rotateDisplay state dcb = do

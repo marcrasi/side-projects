@@ -42,6 +42,12 @@ getFaceVertex coordinateTransform vertexIndex
   | (getVertexIndex $ vertex1 coordinateTransform) == vertexIndex = faceVertex1 coordinateTransform
   | (getVertexIndex $ vertex2 coordinateTransform) == vertexIndex = faceVertex2 coordinateTransform
 
+getOtherFaceVertex :: CoordinateTransform -> VertexIndex -> VertexIndex -> Vec2
+getOtherFaceVertex coordinateTransform a b
+  | (getVertexIndex $ vertex0 coordinateTransform) /= a && (getVertexIndex $ vertex0 coordinateTransform) /= b = faceVertex0 coordinateTransform
+  | (getVertexIndex $ vertex1 coordinateTransform) /= a && (getVertexIndex $ vertex1 coordinateTransform) /= b = faceVertex1 coordinateTransform
+  | (getVertexIndex $ vertex2 coordinateTransform) /= a && (getVertexIndex $ vertex2 coordinateTransform) /= b = faceVertex2 coordinateTransform
+
 -- To transform the position, simply go into ambient coordinates and then
 -- back into face coordinates.
 -- To transform the direction, calculate the angle between it and the edge
@@ -63,17 +69,29 @@ jumpAcrossEdge surface (SurfaceCoordinate sourceFace sourcePosition) sourceEdge 
     Edge edgeVertexA edgeVertexB = sourceEdge
     sourceEdgeVertexA = getFaceVertex sourceFaceTransform edgeVertexA
     sourceEdgeVertexB = getFaceVertex sourceFaceTransform edgeVertexB
-    desitnationEdgeVertexA = getFaceVertex destinationFaceTransform edgeVertexA
-    desitnationEdgeVertexB = getFaceVertex destinationFaceTransform edgeVertexB
+    destinationEdgeVertexA = getFaceVertex destinationFaceTransform edgeVertexA
+    destinationEdgeVertexB = getFaceVertex destinationFaceTransform edgeVertexB
 
     sourceEdgeDirection = normalize $ sourceEdgeVertexB - sourceEdgeVertexA
     sourceEdgePerpDirection = perp sourceEdgeDirection
-    destinationEdgeDirection = normalize $ desitnationEdgeVertexB - desitnationEdgeVertexA
-    desitnationEdgePerpDirection = perp destinationEdgeDirection
+    destinationEdgeDirection = normalize $ destinationEdgeVertexB - destinationEdgeVertexA
+    destinationEdgePerpDirection = perp destinationEdgeDirection
+
+    -- TODO: Consider if there is a cleaner way of doing this.
+    -- ALSO TODO: Write a test that tests for the correctness of this part.
+    destinationOtherVertex = getOtherFaceVertex destinationFaceTransform edgeVertexA edgeVertexB
+    perpMultiplier = if (dot destinationEdgePerpDirection (destinationOtherVertex - destinationEdgeVertexA)) > 0
+      then 1
+      else (-1)
+    sourceOtherVertex = getOtherFaceVertex sourceFaceTransform edgeVertexA edgeVertexB
+    perpMultiplier2 = if (dot sourceEdgePerpDirection (sourceOtherVertex - sourceEdgeVertexA)) > 0
+      then (-1)
+      else 1
+
 
     jumpedDirection =
-      (dot direction sourceEdgeDirection) *^ destinationEdgeDirection -
-        (dot direction sourceEdgePerpDirection) *^ desitnationEdgePerpDirection
+      (dot direction sourceEdgeDirection) *^ destinationEdgeDirection +
+        (perpMultiplier * perpMultiplier2 * (dot direction sourceEdgePerpDirection)) *^ destinationEdgePerpDirection
 
 advanceGeodesic :: DiscreteSurface -> SurfaceCoordinate -> Vec2 -> Double -> SurfaceCoordinate
 advanceGeodesic surface (SurfaceCoordinate startFaceIndex start) direction t =

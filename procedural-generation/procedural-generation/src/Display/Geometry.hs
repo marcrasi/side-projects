@@ -66,7 +66,17 @@ prepareTextures surface (SurfaceField faceFields) = do
 
 displayDiscreteSurface :: DiscreteSurface -> Vector PreparedTexture -> DisplayCallback
 displayDiscreteSurface surface preparedTextures = do
+
+
+  materialAmbient Front $= Color4 1 1 1 1
+  materialDiffuse Front $= Color4 1 1 1 1
+  materialAmbient Back $= Color4 1 1 1 1
+  materialDiffuse Back $= Color4 1 1 1 1
+
   zipWithM_ displayFace (toList $ coordinateTransforms surface) (toList preparedTextures)
+
+  flush
+
   where
     displayFace coordinateTransform preparedTexture = do
       let IndexedVertex _ (Vertex v0) = vertex0 coordinateTransform
@@ -84,7 +94,6 @@ displayDiscreteSurface surface preparedTextures = do
         texCoord $ vertex2TexCoord preparedTexture
         vertex3f v2
       texture Texture2D $= Disabled
-      flush
 
     vertex3f (V3 vx vy vz) = vertex $ Vertex3 vx vy vz
 

@@ -240,8 +240,7 @@ surfaceToAmbient surface (SurfaceCoordinate face faceCoordinate) =
  - containing the intersection between the face and the "normal" bucket
  - square.
  -
- - TODO: Make `values` be an unboxed Vector. Also make it possible to
- - decide whether `values` should be mutable.
+ - TODO: Make `values` be an unboxed Vector.
  -}
 data FaceField v a = FaceField
   { values :: v a
@@ -250,10 +249,13 @@ data FaceField v a = FaceField
   , yBucketCount :: Int
   }
 
-createFaceField :: GV.Vector v a => Double -> a -> CoordinateTransform -> FaceField v a
-createFaceField fineness initialValue coordinateTransform =
+createFaceField :: GV.Vector v a => Double -> a -> a -> CoordinateTransform -> FaceField v a
+createFaceField fineness initialValue iv2 coordinateTransform =
   FaceField
-    { values = GV.replicate (xBucketCount * yBucketCount) initialValue
+    { values = GV.generate (xBucketCount * yBucketCount) (\i ->
+      if (i `mod` xBucketCount) `mod` 2 == (i `div` xBucketCount) `mod` 2
+        then initialValue
+        else iv2)
     , fineness = fineness
     , xBucketCount = xBucketCount
     , yBucketCount = yBucketCount
@@ -264,14 +266,31 @@ createFaceField fineness initialValue coordinateTransform =
     xBucketCount = ceiling $ xMax / fineness
     yBucketCount = ceiling $ yMax / fineness
 
+data FaceBucketIndex = FaceBucketIndex Int
+
+toFaceBucketIndex :: FaceField v a -> Vec2 -> FaceBucketIndex
+toFaceBucketIndex (FaceField _ fineness xBucketCount _) (V2 x y) =
+  FaceBucketIndex $ (floor $ x / fineness) + xBucketCount * (floor $ y / fineness)
+
 {-
  - One FaceField per face.
  -}
 data SurfaceField v a = SurfaceField (Vector (FaceField v a))
 
-createSurfaceField :: GV.Vector v a => Double -> a -> DiscreteSurface -> SurfaceField v a
-createSurfaceField fineness initialValue surface = SurfaceField $
+createSurfaceField :: GV.Vector v a => Double -> a -> a -> DiscreteSurface -> SurfaceField v a
+createSurfaceField fineness initialValue iv2 surface = SurfaceField $
   fromList $
-  map (createFaceField fineness initialValue) $
+  map (createFaceField fineness initialValue iv2) $
   toList $
   coordinateTransforms surface
+
+data SurfaceBucketCoordinates = SurfaceBucketCoordinates
+  { bFace :: FaceIndex
+  , faceBucketIndex :: FaceBucketIndex
+  }
+
+toSurfaceBucketCoordinates :: SurfaceField v a -> SurfaceCoordinate -> SurfaceBucketCoordinates
+toSurfaceBucketCoordinates (SurfaceField faceFields) (SurfaceCoordinate (FaceIndex faceIndex) faceCoordinate) =
+  SurfaceBucketCoordinates
+    (FaceIndex faceIndex)
+    (toFaceBucketIndex (faceFields ! faceIndex) faceCoordinate)
