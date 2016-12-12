@@ -2,6 +2,7 @@ module Geometry2.Primitives where
 
 import qualified Data.Map.Strict as Map
 import Data.Vector (Vector, fromList, toList, (!))
+import qualified Data.Vector.Generic as GV
 import Linear
   ( V2(V2)
   , V3(V3)
@@ -212,17 +213,65 @@ surfaceToAmbient surface (SurfaceCoordinate face faceCoordinate) =
  - The fineness is the side length of the (square) bucket, in ambient
  - space.
  -
+ - Position (x, y) lives inside bucket
+ - (bx, by) = (floor $ x / fineness, floor $ y / fineness):
+ -
+ -
+ -      |<-----fineness----->|
+ -      o--------------------o -
+ -      |                    | ^
+ -      |                    | |
+ -      |                    | |
+ -      |     * (x, y)       | fineness
+ -      |                    | |
+ -      |                    | |
+ -      |                    | |
+ -      |                    | v
+ -      o--------------------o -
+ -
+ - Bucket (bx, by) is element (bx + xBucketCount * by) of the `values`
+ - Vector.
+ -
+ - There are (xBucketCount * yBucketCount) buckets.
+ -
+ - Buckets fully outside the face are meaningless.
+ -
+ - Buckets partially outside the face shall be interpreted as buckets
+ - containing the intersection between the face and the "normal" bucket
+ - square.
+ -
  - TODO: Make `values` be an unboxed Vector. Also make it possible to
  - decide whether `values` should be mutable.
  -}
-data FaceField a = FaceField
-  { values :: Vector a
+data FaceField v a = FaceField
+  { values :: v a
   , fineness :: Double
+  , xBucketCount :: Int
+  , yBucketCount :: Int
   }
-  deriving Show
+
+createFaceField :: GV.Vector v a => Double -> a -> CoordinateTransform -> FaceField v a
+createFaceField fineness initialValue coordinateTransform =
+  FaceField
+    { values = GV.replicate (xBucketCount * yBucketCount) initialValue
+    , fineness = fineness
+    , xBucketCount = xBucketCount
+    , yBucketCount = yBucketCount
+    }
+  where
+    V2 xMax _ = faceVertex1 coordinateTransform
+    V2 _ yMax = faceVertex2 coordinateTransform
+    xBucketCount = ceiling $ xMax / fineness
+    yBucketCount = ceiling $ yMax / fineness
 
 {-
  - One FaceField per face.
  -}
-data SurfaceField a = SurfaceField (Vector (FaceField a))
-  deriving Show
+data SurfaceField v a = SurfaceField (Vector (FaceField v a))
+
+createSurfaceField :: GV.Vector v a => Double -> a -> DiscreteSurface -> SurfaceField v a
+createSurfaceField fineness initialValue surface = SurfaceField $
+  fromList $
+  map (createFaceField fineness initialValue) $
+  toList $
+  coordinateTransforms surface

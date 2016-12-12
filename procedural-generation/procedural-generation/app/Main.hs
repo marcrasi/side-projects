@@ -1,116 +1,49 @@
 module Main where
+
 import Control.Monad
+import Control.Monad.ST (runST)
+
+import qualified Data.Vector as Vector
 
 import qualified Geometry2.DiscreteSurfaces as DiscreteSurfaces
+import qualified Geometry2.Geodesic as Geodesic
+import qualified Geometry2.Primitives as Primitives
 import qualified Display as Display
 import qualified Display.Geometry as DisplayGeometry
+
+import Graphics.UI.GLUT
+
+thawFaceField faceField = do
+  thawedValues <- Vector.thaw $ Primitives.values faceField
+  return $ faceField { Primitives.values = thawedValues }
+
+thawSurfaceField (Primitives.SurfaceField faceFields) = do
+  thawedFaceFields <- mapM thawFaceField $ toList faceFields
+  return $ Primitives.SurfaceField $ fromList thawedFaceFields
+
+freezeFaceField faceField = do
+  frozenValues <- Vector.freeze $ Primitives.values faceField
+  return $ faceField { Primitives.values = frozenValues }
+
+freezeSurfaceField (Primitives.SurfaceField faceFields) = do
+  frozenFaceFields <- mapM freezeFaceField $ toList faceFields
+  return $ Primitives.SurfaceField $ fromList frozenFaceFields
+
+-- TODO: Discrete surface coordinate types.
+writeSurfaceField (Primitives.SurfaceField surfaceField) (Primitives.SurfaceCoordinate ..)
+
+drawGeodesic :: DiscreteSurface -> Primitives.SurfaceField Vector (Color4 GLubyte) -> Primitives.SurfaceField Vector (Color4 GLubyte)
+drawGeodesic surface canvas = runST $ do
+  mutableCanvas <- thawSurfaceField canvas
+  mapM_ (drawPoint mutableCanvas) [0,0.01..2]
+  return $ freezeSurfaceField mutableCanvas
+  where
+    drawPoint mutableCanvas t =
 
 main :: IO ()
 main = do
   Display.doInitialize
-  textureName <- DisplayGeometry.prepareTexture DisplayGeometry.checkers
-  Display.doDisplay $ DisplayGeometry.displayDiscreteSurface DiscreteSurfaces.cube textureName
-
-{-
-   Checker.hs  (adapted from checker.c which is (c) Silicon Graphics, Inc)
-   Copyright (c) Sven Panne 2002-2005 <svenpanne@gmail.com>
-   This file is part of HOpenGL and distributed under a BSD-style license
-   See the file libraries/GLUT/LICENSE
-
-   This program texture maps a checkerboard image onto two rectangles.
-
-   Texture objects are only used when GL_EXT_texture_object is supported.
--}
-
-{-
-import Control.Monad ( when )
-import Data.Maybe ( isJust )
-import Data.Bits ( (.&.) )
-import Foreign ( withArray )
-import System.Exit ( exitWith, ExitCode(ExitSuccess) )
-import Graphics.UI.GLUT
-
--- Create checkerboard image
-checkImageSize :: TextureSize2D
-checkImageSize = TextureSize2D 64 64
-
-withCheckImage :: TextureSize2D -> GLsizei -> (GLubyte -> (Color4 GLubyte))
-               -> (PixelData (Color4 GLubyte) -> IO ()) -> IO ()
-withCheckImage (TextureSize2D w h) n f act =
-   withArray [ f c |
-               i <- [ 0 .. w - 1 ],
-               j <- [ 0 .. h - 1 ],
-               let c | (i .&. n) == (j .&. n) = 0
-                     | otherwise              = 255 ] $
-   act. PixelData RGBA UnsignedByte
-
-myInit :: IO (Maybe TextureObject)
-myInit = do
-   clearColor $= Color4 0 0 0 0
-   shadeModel $= Flat
-   depthFunc $= Just Less
-   rowAlignment Unpack $= 1
-
-   exts <- get glExtensions
-   mbTexName <- if "GL_EXT_texture_object" `elem` exts
-                   then fmap Just genObjectName
-                   else return Nothing
-   when (isJust mbTexName) $ textureBinding Texture2D $= mbTexName
-
-   textureWrapMode Texture2D S $= (Repeated, Repeat)
-   textureWrapMode Texture2D T $= (Repeated, Repeat)
-   textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
-   withCheckImage checkImageSize 0x8 (\c -> Color4 c c c 255) $
-      texImage2D Texture2D NoProxy 0  RGBA' checkImageSize 0
-   return mbTexName
-
-display ::  Maybe TextureObject -> DisplayCallback
-display mbTexName = do
-   clear [ ColorBuffer, DepthBuffer ]
-   texture Texture2D $= Enabled
-   textureFunction $= Decal
-   when (isJust mbTexName) $ textureBinding Texture2D $= mbTexName
-
-   -- resolve overloading, not needed in "real" programs
-   let texCoord2f = texCoord :: TexCoord2 GLfloat -> IO ()
-       vertex3f = vertex :: Vertex3 GLfloat -> IO ()
-   renderPrimitive Quads $ do
-      texCoord2f (TexCoord2 0 0); vertex3f (Vertex3 (-2.0)    (-1.0)   0.0     )
-      texCoord2f (TexCoord2 0 1); vertex3f (Vertex3 (-2.0)      1.0    0.0     )
-      texCoord2f (TexCoord2 1 1); vertex3f (Vertex3   0.0       1.0    0.0     )
-      texCoord2f (TexCoord2 1 0); vertex3f (Vertex3   0.0     (-1.0)   0.0     )
-
-      texCoord2f (TexCoord2 0 0); vertex3f (Vertex3   1.0     (-1.0)   0.0     )
-      texCoord2f (TexCoord2 0 1); vertex3f (Vertex3   1.0       1.0    0.0     )
-      texCoord2f (TexCoord2 1 1); vertex3f (Vertex3   2.41421   1.0  (-1.41421))
-      texCoord2f (TexCoord2 1 0); vertex3f (Vertex3   2.41421 (-1.0) (-1.41421))
-   flush
-   texture Texture2D $= Disabled
-
-reshape :: ReshapeCallback
-reshape size@(Size w h) = do
-   viewport $= (Position 0 0, size)
-   matrixMode $= Projection
-   loadIdentity
-   perspective 60 (fromIntegral w / fromIntegral h) 1 30
-   matrixMode $= Modelview 0
-   loadIdentity
-   translate (Vector3 0 0 (-3.6 :: GLfloat))
-
-keyboard :: KeyboardMouseCallback
-keyboard (Char '\27') Down _ _ = exitWith ExitSuccess
-keyboard _            _    _ _ = return ()
-
-main :: IO ()
-main = do
-   (progName, _args) <- getArgsAndInitialize
-   initialDisplayMode $= [ SingleBuffered, RGBMode, WithDepthBuffer ]
-   initialWindowSize $= Size 250 250
-   initialWindowPosition $= Position 100 100
-   _ <- createWindow progName
-   mbTexName <- myInit
-   displayCallback $= display mbTexName
-   reshapeCallback $= Just reshape
-   keyboardMouseCallback $= Just keyboard
-   mainLoop
--}
+  let cube = DiscreteSurfaces.cube
+  let surfaceField = Primitives.createSurfaceField 0.1 (Color4 0 255 255 255) cube
+  preparedTextures <- DisplayGeometry.prepareTextures cube surfaceField
+  Display.doDisplay $ DisplayGeometry.displayDiscreteSurface cube preparedTextures
