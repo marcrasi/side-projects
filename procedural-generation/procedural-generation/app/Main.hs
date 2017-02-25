@@ -14,6 +14,7 @@ import qualified Geometry2.Geodesic as Geodesic
 import qualified Geometry2.Primitives as Primitives
 import qualified Display as Display
 import qualified Display.Geometry as DisplayGeometry
+import qualified Wave as Wave
 
 import Graphics.UI.GLUT
 
@@ -40,8 +41,26 @@ writeFaceField faceField (Primitives.FaceBucketIndex faceBucketIndex) value =
   MVector.write (Primitives.values faceField) faceBucketIndex value
 
 -- TODO: Discrete surface coordinate types.
-writeSurfaceField (Primitives.SurfaceField faceFields) (Primitives.SurfaceBucketCoordinates (Primitives.FaceIndex faceIndex) faceBucketIndex) value =
+writeSurfaceField (Primitives.SurfaceField faceFields) (Primitives.SurfaceBucketCoordinate (Primitives.FaceIndex faceIndex) faceBucketIndex) value =
   writeFaceField (faceFields Vector.! faceIndex) faceBucketIndex value
+
+scalarFieldToGrayscale :: Primitives.SurfaceField Vector.Vector Double -> Primitives.SurfaceField Vector.Vector (Color4 GLubyte)
+scalarFieldToGrayscale surfaceField =
+  Primitives.mapSurfaceField (\scalar -> let byte = ((floor $ 256 * scalar) `min` 255) `max` 0 in Color4 byte byte byte 255) surfaceField
+
+drawDisc :: Double -> Primitives.DiscreteSurface -> Primitives.SurfaceField Vector.Vector Double -> Primitives.SurfaceField Vector.Vector Double
+drawDisc radius surface canvas = runST $ do
+  mutableCanvas <- thawSurfaceField canvas
+  mapM_ (drawCircle mutableCanvas) [0,0.01..radius]
+  freezeSurfaceField mutableCanvas
+  where
+    center = Primitives.SurfaceCoordinate (Primitives.FaceIndex 0) (V2 0.3 0.2)
+    drawCircle mutableCanvas radius = mapM_ (drawPoint mutableCanvas radius) [0,(0.01/radius)..6.3]
+    drawPoint mutableCanvas radius angle =
+      let
+        point = Geodesic.advanceGeodesic surface center (V2 (cos angle) (sin angle)) radius
+      in
+        writeSurfaceField mutableCanvas (Primitives.toSurfaceBucketCoordinate mutableCanvas point) 0.1
 
 drawGeodesic :: Primitives.DiscreteSurface -> Primitives.SurfaceField Vector.Vector (Color4 GLubyte) -> Primitives.SurfaceField Vector.Vector (Color4 GLubyte)
 drawGeodesic surface canvas = runST $ do
@@ -60,16 +79,27 @@ drawGeodesic surface canvas = runST $ do
       in
         traceShow foo $ writeSurfaceField
           mutableCanvas
-          (Primitives.toSurfaceBucketCoordinates
+          (Primitives.toSurfaceBucketCoordinate
             mutableCanvas
             (foo))
           (Color4 (floor $ 255 * t / length) 0 255 100)
 
+myDisplayCallback :: DisplayGeometry.PreparedTextures -> Wave.WaveState -> IO ()
+myDisplayCallback preparedTextures (Wave.WaveState field _) = do
+  --let grayscale = scalarFieldToGrayscale field
+  let grayscale = scalarFieldToGrayscale $ Wave.laplacian DiscreteSurfaces.cube field
+  DisplayGeometry.writeTextures preparedTextures DiscreteSurfaces.cube grayscale
+  DisplayGeometry.displayDiscreteSurface DiscreteSurfaces.cube preparedTextures
+
+timeStep :: Double -> Wave.WaveState -> Wave.WaveState
+--timeStep dt field = Wave.advance dt DiscreteSurfaces.cube field
+timeStep dt field = field
+
 main :: IO ()
 main = do
   Display.doInitialize
-  let cube = DiscreteSurfaces.cube
-  let surfaceField = Primitives.createSurfaceField 0.021 (Color4 100 100 100 100) (Color4 100 100 100 100) cube
-  let surfaceField2 = drawGeodesic cube surfaceField
-  preparedTextures <- DisplayGeometry.prepareTextures cube surfaceField2
-  Display.doDisplay $ DisplayGeometry.displayDiscreteSurface cube preparedTextures
+  let valueField = drawDisc 0.1 DiscreteSurfaces.cube $ Primitives.createSurfaceField 0.02 0 0 DiscreteSurfaces.cube
+  let velocityField = Primitives.createSurfaceField 0.02 0 0 DiscreteSurfaces.cube
+  let waveState = Wave.WaveState valueField velocityField
+  preparedTextures <- DisplayGeometry.prepareTextures DiscreteSurfaces.cube valueField
+  Display.doDisplay waveState timeStep (myDisplayCallback preparedTextures)

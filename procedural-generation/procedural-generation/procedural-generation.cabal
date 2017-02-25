@@ -20,11 +20,15 @@ library
                      , Geometry2.Primitives
                      , Display.Geometry
                      , Display
+                     , Wave
   build-depends:       base >= 4.7 && < 5
                      , linear
                      , vector
                      , GLUT
                      , containers
+                     , MonadRandom
+                     , time
+                     , monadlist
   default-language:    Haskell2010
 
 executable procedural-generation-exe
@@ -49,6 +53,7 @@ test-suite procedural-generation-test
                      , tasty
                      , tasty-quickcheck
                      , linear
+                     , vector
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

@@ -1,16 +1,20 @@
 module Display where
 
-import Data.IORef ( IORef, newIORef )
+import Data.IORef ( IORef, newIORef, writeIORef )
+import Data.Time.Clock ( diffUTCTime, getCurrentTime, UTCTime )
 import Graphics.UI.GLUT
 import System.Exit ( exitWith, ExitCode(ExitSuccess) )
 
-data State = State { rxRef, ryRef :: IORef GLfloat }
+data State a = State { rxRef, ryRef :: IORef GLfloat, valueRef :: IORef a, lastUpdateRef :: IORef UTCTime }
 
-makeState :: IO State
-makeState = do
-  rx <- newIORef 0
-  ry <- newIORef 0
-  return $ State rx ry
+makeState :: a -> IO (State a)
+makeState initial = do
+  rxRef <- newIORef 0
+  ryRef <- newIORef 0
+  valueRef <- newIORef initial
+  lastUpdate <- getCurrentTime
+  lastUpdateRef <- newIORef lastUpdate
+  return $ State rxRef ryRef valueRef lastUpdateRef
 
 myInit :: IO ()
 myInit = do
@@ -32,8 +36,8 @@ myInit = do
 
   rowAlignment Unpack $= 1
 
-rotateDisplay :: State -> DisplayCallback -> DisplayCallback
-rotateDisplay state dcb = do
+rotatedDisplay :: State a -> (a -> DisplayCallback) -> DisplayCallback
+rotatedDisplay state dcb = do
   clear [ ColorBuffer, DepthBuffer ]
   preservingMatrix $ do
     rx <- get (rxRef state)
@@ -42,11 +46,12 @@ rotateDisplay state dcb = do
     rotate ry $ Vector3 1 0 0
     scale 0.5 0.5 (0.5 :: GLfloat)
     --renderObject Solid (Sphere' 1 20 16)
-    dcb
+    value <- get (valueRef state)
+    dcb value
     flush
   swapBuffers
 
-keyboard :: State -> KeyboardMouseCallback
+keyboard :: State a -> KeyboardMouseCallback
 keyboard state (Char c) Down _ _ = case c of
   'w' -> update rxRef 10
   'a' -> update ryRef (-10)
@@ -69,9 +74,28 @@ doInitialize = do
   _ <- createWindow "Procedural Generation Display"
   myInit
 
-doDisplay :: DisplayCallback -> IO ()
-doDisplay dcb = do
-  state <- makeState
-  displayCallback $= (rotateDisplay state dcb)
+timerCallback :: State a -> (Double -> a -> a) -> IO ()
+timerCallback state timeStep = do
+  value <- get (valueRef state)
+  lastUpdate <- get (lastUpdateRef state)
+  currentTime <- getCurrentTime
+  let stepSize = diffUTCTime currentTime lastUpdate
+  let newValue = timeStep (realToFrac stepSize) value
+  writeIORef (valueRef state) newValue
+  writeIORef (lastUpdateRef state) currentTime
+  postRedisplay Nothing
+  addTimerCallback 100 (timerCallback state timeStep)
+
+data ToDisplay a = ToDisplay
+  { initial :: a
+  , timeStep :: Double -> a -> a
+  , dcb :: a -> DisplayCallback
+  }
+
+doDisplay :: a -> (Double -> a -> a) -> (a -> DisplayCallback) -> IO ()
+doDisplay initial timeStep dcb = do
+  state <- makeState initial
+  displayCallback $= (rotatedDisplay state dcb)
   keyboardMouseCallback $= Just (keyboard state)
+  addTimerCallback 100 (timerCallback state timeStep)
   mainLoop

@@ -3,6 +3,7 @@ module Tests.Geometry2.Primitives where
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
+import Data.Vector (Vector)
 import Linear
   ( V2(V2)
   , V3(V3)
@@ -16,6 +17,7 @@ import Linear
 import Instances.Linear ()
 
 import Tests.Geometry2.TestUtilities
+import Geometry2.DiscreteSurfaces (square)
 import Geometry2.Primitives
 
 tests = testGroup "Primitives"
@@ -29,6 +31,10 @@ tests = testGroup "Primitives"
     ]
   , testGroup "canonicalCoordinateTransform"
     [ testProperty "canonicalCoordinateTransform_correctlyBounded" canonicalCoordinateTransform_correctlyBounded
+    ]
+  , testGroup "bucketCenter"
+    [ testProperty "bucketCenter_inverse_1" bucketCenter_inverse_1
+    , testProperty "bucketCenter_inverse_2" bucketCenter_inverse_2
     ]
   ]
 
@@ -112,4 +118,64 @@ canonicalCoordinateTransform_correctlyBounded a b c =
     V2 x3 y3 = toFace transform c
     (xmax, _) = head $ dropWhile (not . (\(x, y) -> x > 0 && y < epsilon)) [(x1, y1), (x2, y2), (x3, y3)]
 
+data InSquare = InSquare (V2 Double)
+  deriving (Show)
+
+instance (Arbitrary InSquare) where
+  arbitrary = InSquare <$> (V2 <$> choose (0, 1) <*> choose (0, 1))
+
+data GoodFineness = GoodFineness Double
+  deriving (Show)
+
+instance (Arbitrary GoodFineness) where
+  arbitrary = GoodFineness <$> choose (0.01, 0.5)
+
+bucketCenter_inverse_1 (InSquare ambientStart) (GoodFineness fineness) =
+  case mayBucketCenterAmbient of
+    Just (V3 startBucketCenterX startBucketCenterY _) ->
+      counterexample
+        ("V2 " ++ show startBucketCenterX ++ " " ++ show startBucketCenterY ++ " not within fineness of " ++ show ambientStart) $
+        conjoin
+          [ abs (x - startBucketCenterX) <= fineness
+          , abs (y - startBucketCenterY) <= fineness
+          ]
+    Nothing -> counterexample "Didn't get a bucket center." False
+  where
+    field = replicateSurfaceField fineness 0 square :: SurfaceField Vector Double
+
+    -- TODO: Make a general function that converts a point in ambient
+    -- coordinates to the closest surface point.
+    V2 x y = ambientStart
+    ambientStart3 = V3 x y 0
+    surfaceStartFace = if y < x
+      then FaceIndex 0
+      else FaceIndex 1
+    surfaceStartCoordinateTransform = lookupCoordinateTransform (coordinateTransforms square) surfaceStartFace
+    surfaceStart = SurfaceCoordinate
+      surfaceStartFace
+      (toFace surfaceStartCoordinateTransform ambientStart3)
+
+    startSurfaceBucketCoordinate = toSurfaceBucketCoordinate field surfaceStart
+
+    mayStartBucketCenter = bucketCenter square field startSurfaceBucketCoordinate
+
+    mayBucketCenterAmbient = fmap (\(SurfaceCoordinate _ v) -> toAmbient surfaceStartCoordinateTransform v) mayStartBucketCenter
+
+bucketCenter_inverse_2 faceIndexInt faceBucketIndexInt (GoodFineness fineness) =
+  counterexample debugInfo $ case maySurfaceBucketCoordinate of
+    Just surfaceBucketCoordinate -> surfaceBucketCoordinate === start
+    Nothing -> 1 === 1 -- TODO: find cleaner way of always passing here
+  where
+    field = replicateSurfaceField fineness 0 square :: SurfaceField Vector Double
+
+    faceIndex = FaceIndex (faceIndexInt `mod` 2)
+    faceBucketIndex = FaceBucketIndex (faceBucketIndexInt `mod` (bucketCount $ lookupFaceField field faceIndex))
+
+    start = SurfaceBucketCoordinate faceIndex faceBucketIndex
+    mayStartCenter = bucketCenter square field start
+    maySurfaceBucketCoordinate = fmap (\startCenter -> toSurfaceBucketCoordinate field startCenter) mayStartCenter
+
+    debugInfo =
+      "start = " ++ show start ++ "\n" ++
+        "mayStartCenter = " ++ show mayStartCenter ++ "\n"
 

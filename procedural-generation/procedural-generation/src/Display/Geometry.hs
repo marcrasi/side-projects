@@ -29,6 +29,8 @@ import Geometry2.Primitives
   , fineness
   )
 
+type PreparedTextures = Vector PreparedTexture
+
 data PreparedTexture = PreparedTexture
   { textureName :: TextureObject
   , vertex0TexCoord :: TexCoord2 GLfloat
@@ -36,18 +38,9 @@ data PreparedTexture = PreparedTexture
   , vertex2TexCoord :: TexCoord2 GLfloat
   }
 
-prepareTexture :: CoordinateTransform -> FaceField Vector (Color4 GLubyte) -> IO PreparedTexture
-prepareTexture coordinateTransform (FaceField values fineness xBucketCount yBucketCount) = do
+prepareTexture :: CoordinateTransform -> FaceField Vector a -> IO PreparedTexture
+prepareTexture coordinateTransform (FaceField _ fineness xBucketCount yBucketCount) = do
   textureName <- genObjectName
-
-  textureBinding Texture2D $= Just textureName
-  textureWrapMode Texture2D S $= (Repeated, Repeat)
-  textureWrapMode Texture2D T $= (Repeated, Repeat)
-  textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
-
-  let textureSize = TextureSize2D (fromIntegral xBucketCount) (fromIntegral yBucketCount)
-  withArray (toList values) $ (texImage2D Texture2D NoProxy 0 RGBA' textureSize 0) . (PixelData RGBA UnsignedByte)
-
   return $ PreparedTexture
     { textureName = textureName
     , vertex0TexCoord = makeTexCoord $ faceVertex0 coordinateTransform
@@ -59,15 +52,27 @@ prepareTexture coordinateTransform (FaceField values fineness xBucketCount yBuck
       (double2Float $ x / (fineness * (fromIntegral xBucketCount)))
       (double2Float $ y / (fineness * (fromIntegral yBucketCount)))
 
-prepareTextures :: DiscreteSurface -> SurfaceField Vector (Color4 GLubyte) -> IO (Vector PreparedTexture)
+prepareTextures :: DiscreteSurface -> SurfaceField Vector a -> IO (Vector PreparedTexture)
 prepareTextures surface (SurfaceField faceFields) = do
   preparedTextures <- zipWithM prepareTexture (toList $ coordinateTransforms surface) (toList faceFields)
   return $ fromList preparedTextures
 
+writeTexture :: PreparedTexture -> CoordinateTransform -> FaceField Vector (Color4 GLubyte) -> IO ()
+writeTexture preparedTexture coordinateTransform (FaceField values fineness xBucketCount yBucketCount) = do
+  textureBinding Texture2D $= Just (textureName preparedTexture)
+  textureWrapMode Texture2D S $= (Repeated, Repeat)
+  textureWrapMode Texture2D T $= (Repeated, Repeat)
+  textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
+  let textureSize = TextureSize2D (fromIntegral xBucketCount) (fromIntegral yBucketCount)
+  withArray (toList values) $ (texImage2D Texture2D NoProxy 0 RGBA' textureSize 0) . (PixelData RGBA UnsignedByte)
+  return ()
+
+writeTextures :: PreparedTextures -> DiscreteSurface -> SurfaceField Vector (Color4 GLubyte) -> IO ()
+writeTextures preparedTextures surface (SurfaceField faceFields) =
+  mapM_ (\(a, b, c) -> writeTexture a b c) $ zip3 (toList preparedTextures) (toList $ coordinateTransforms surface) (toList faceFields)
+
 displayDiscreteSurface :: DiscreteSurface -> Vector PreparedTexture -> DisplayCallback
 displayDiscreteSurface surface preparedTextures = do
-
-
   materialAmbient Front $= Color4 1 1 1 1
   materialDiffuse Front $= Color4 1 1 1 1
   materialAmbient Back $= Color4 1 1 1 1
