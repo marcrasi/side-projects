@@ -136,7 +136,7 @@ def load_glove(vocabulary):
         del vocabulary[word]
 
     # Load from glove
-    with open('/Users/marc/Downloads/glove.6B/glove.6B.%dd.txt' % EMBEDDING_DIMENSION, 'r') as f:
+    with open('glove.6B.%dd.txt' % EMBEDDING_DIMENSION, 'r') as f:
         for line in f:
             sp = line.split(' ')
             if sp[0] in vocabulary:
