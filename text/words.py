@@ -43,7 +43,7 @@ def get_texts():
         "http://www.gutenberg.org/cache/epub/32832/pg32832.txt",
         "http://www.gutenberg.org/cache/epub/40964/pg40964.txt",
         "http://www.gutenberg.org/cache/epub/583/pg583.txt",
-        #"http://www.gutenberg.org/files/155/155-0.txt",
+        "http://www.gutenberg.org/files/155/155-0.txt",
         #"http://www.gutenberg.org/files/1626/1626-0.txt",
         #"http://www.gutenberg.org/files/1438/1438-0.txt",
         #"http://www.gutenberg.org/files/1895/1895-0.txt",
@@ -302,14 +302,12 @@ def train_markov(order, vocabulary, sequences):
     }
 
 
-def construct_sequences(sentences):
+def construct_sequences(sentences, min_length=2):
     sequences = []
     for sentence_without_terminators in sentences:
         sentence = ['START'] + sentence_without_terminators + ['END']
-        for end in range(2, len(sentence) + 1):
-            start = max(0, end - SEQUENCE_LENGTH)
-            front_pad = SEQUENCE_LENGTH - (end - start)
-            sequences.append(['PAD'] * front_pad + sentence[start:end])
+        for end in range(min_length, len(sentence) + 1):
+            sequences.append(sentence[:end])
     return sequences
 
 
@@ -479,18 +477,20 @@ embedding = load_embedding(vocabulary)
 # Constants
 SEQUENCE_LENGTH = 20
 EMBEDDING_DIMENSION = embedding.shape[0]
-LSTM_DIMENSION = 100
+LSTM_DIMENSION = 256
 OUTPUT_DIMENSION = len(vocabulary)
 BEST_CHECKPOINT_FILE = 'weights.best.hdf5'
+BATCH_SIZE = 128
 
 print 'SEQUENCE_LENGTH = %d' % SEQUENCE_LENGTH
 print 'EMBEDDING_DIMENSION = %d' % EMBEDDING_DIMENSION
 print 'LSTM_DIMENSION = %d' % LSTM_DIMENSION
 print 'OUTPUT_DIMENSION = %d' % OUTPUT_DIMENSION
+print 'BATCH_SIZE = %d' % BATCH_SIZE
 
 # Model
 model = Sequential()
-model.add(LSTM(LSTM_DIMENSION, input_shape=(SEQUENCE_LENGTH - 1, EMBEDDING_DIMENSION)))
+model.add(LSTM(LSTM_DIMENSION, input_shape=(SEQUENCE_LENGTH - 1, EMBEDDING_DIMENSION), consume_less='gpu', stateful=True))
 model.add(Dense(OUTPUT_DIMENSION))
 model.add(Activation('softmax'))
 
@@ -519,7 +519,7 @@ if args.action == 'train':
 
     for iteration in range(1, 500):
         print 'Iteration %d' % iteration
-        model.fit(X, y, batch_size=128, nb_epoch=1, callbacks=checkpointers)
+        model.fit(X, y, batch_size=64, nb_epoch=1, callbacks=checkpointers)
         print_some_predictions(generate_p_lstm(model, embedding, vocabulary), vocabulary, inverse_vocabulary)
         print ''
 
@@ -527,7 +527,7 @@ elif args.action == 'predict':
     print_some_predictions(generate_p_lstm(model, embedding, vocabulary), vocabulary, inverse_vocabulary)
 
 elif args.action == 'predict_markov':
-    sequences = construct_sequences(sentences)
+    sequences = construct_sequences(sentences, 3)
     markov = train_markov(2, vocabulary, sequences)
     print_some_predictions(generate_p_markov(markov, vocabulary), vocabulary, inverse_vocabulary)
 
@@ -543,9 +543,6 @@ elif args.action == 'mh':
     #    in query_words
     #]
     query_words_with_synonyms = [[x] for x in query_words]
-
-    sequences = construct_sequences(sentences)
-    markov = train_markov(2, vocabulary, sequences)
 
     proposal = initial_proposal(
         generate_p_lstm(model, embedding, vocabulary), vocabulary, inverse_vocabulary, query_words, 10)
