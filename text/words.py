@@ -42,12 +42,12 @@ def get_texts():
         "http://www.gutenberg.org/cache/epub/41562/pg41562.txt",
         "http://www.gutenberg.org/cache/epub/32832/pg32832.txt",
         "http://www.gutenberg.org/cache/epub/40964/pg40964.txt",
-        "http://www.gutenberg.org/cache/epub/583/pg583.txt",
-        "http://www.gutenberg.org/files/155/155-0.txt",
-        #"http://www.gutenberg.org/files/1626/1626-0.txt",
-        #"http://www.gutenberg.org/files/1438/1438-0.txt",
-        #"http://www.gutenberg.org/files/1895/1895-0.txt",
-        #"http://www.gutenberg.org/files/1622/1622-0.txt",
+       # "http://www.gutenberg.org/cache/epub/583/pg583.txt",
+       # "http://www.gutenberg.org/files/155/155-0.txt",
+       # "http://www.gutenberg.org/files/1626/1626-0.txt",
+       # "http://www.gutenberg.org/files/1438/1438-0.txt",
+       # "http://www.gutenberg.org/files/1895/1895-0.txt",
+       # "http://www.gutenberg.org/files/1622/1622-0.txt",
     ]
 
     texts = []
@@ -216,48 +216,35 @@ def sample(preds, temperature=1.0):
     return np.argmax(probas)
 
 
-def predict_general(generate_p, inverse_vocabulary, temperature):
-    sentence = ['PAD'] * (SEQUENCE_LENGTH - 2) + ['START']
-    while sentence[-1] != 'END' and len(sentence) < SEQUENCE_LENGTH + 50:
-        next_word = inverse_vocabulary[sample(generate_p([sentence])[0], 1.0)]
-        sentence.append(next_word)
-    return sentence[SEQUENCE_LENGTH - 1 : -1]
-
-
 def seeded_predict(generate_p, inverse_vocabulary, temperature, seed, length):
-    if len(seed) < SEQUENCE_LENGTH - 1:
-        seed = ['PAD'] * (SEQUENCE_LENGTH - 2 - len(seed)) + ['START'] + seed
     sentence = list(seed)
+    model.reset_states()
     while len(sentence) < len(seed) + length:
+        predictions = generate_p(sentence[-1])
         next_word = None
         while next_word is None or next_word == 'END':
-            next_word = inverse_vocabulary[sample(generate_p([sentence])[0], 1.0)]
+            next_word = inverse_vocabulary[sample(predictions, 1.0)]
         sentence.append(next_word)
+    model.reset_states()
     return sentence[len(seed):]
 
 
 def generate_p_lstm(model, embedding, vocabulary):
-    def generate_p(sentences):
-        embedded_sequences = []
-        for sentence in sentences:
-            sequence = sentence[-(SEQUENCE_LENGTH - 1):]
-            embedded_sequences.append(embed_sequence(embedding, vocabulary, sequence))
-        return model.predict(np.array(embedded_sequences), verbose=0)
+    def generate_p(word):
+        prediction = model.predict([np.array([[embed(embedding, vocabulary, word)]] * BATCH_SIZE)], batch_size=BATCH_SIZE, verbose=0)[0]
+        return prediction
     return generate_p
 
 
 def generate_p_markov(markov, vocabulary):
     order = markov['order']
     elements = markov['elements']
-    def generate_p(sentences):
-        predictions = []
-        for sentence in sentences:
-            element = elements
-            for i in range(order):
-                element = element[vocabulary[sentence[i - order]]]
-            unnormalized = np.array([element[i] for i in range(len(elements))])
-            predictions.append(unnormalized / sum(unnormalized))
-        return predictions
+    def generate_p(sentence):
+        element = elements
+        for i in range(order):
+            element = element[vocabulary[sentence[i - order]]]
+        unnormalized = np.array([element[i] for i in range(len(elements))])
+        return unnormalized / sum(unnormalized)
     return generate_p
 
 
@@ -265,7 +252,7 @@ def print_some_predictions(generate_p, vocabulary, inverse_vocabulary):
     for temperature in [0.2, 0.5, 1.0]:
         print 'Temperature %.1f' % temperature
         for _ in range(4):
-            sentence = predict_general(generate_p, inverse_vocabulary, temperature)
+            sentence = seeded_predict(generate_p, inverse_vocabulary, temperature, ['START'], 50)
             print ' '.join(sentence)
             print '\t log likelihood: %.2f' % log_likelihood(generate_p, vocabulary, sentence)
         print ''
@@ -306,20 +293,26 @@ def construct_sequences(sentences, min_length=2):
     sequences = []
     for sentence_without_terminators in sentences:
         sentence = ['START'] + sentence_without_terminators + ['END']
-        for end in range(min_length, len(sentence) + 1):
-            sequences.append(sentence[:end])
+        for end in range(2, len(sentence) + 1):
+            front_pad_count = max(0, min_length - end)
+            sequences.append(['PAD'] * front_pad_count + sentence[:end])
     return sequences
 
 
 def log_likelihood(generate_p, vocabulary, sentence, seed=[]):
-    sequences = construct_sequences([seed + sentence])[len(seed):]
-    in_sequences = [sequence[:-1] for sequence in sequences]
-    out_words = [sequence[-1] for sequence in sequences]
-    predictions = generate_p(in_sequences)
+    model.reset_states()
     result = 0.0
-    for out_word, prediction in zip(out_words, predictions):
-        result += np.log(prediction[vocabulary[out_word]])
+    if len(seed) == 0:
+         seed = [sentence[0]]
+         sentence = sentence[1:]
+    predictions = None
+    for word in seed:
+        predictions = generate_p(word)
+    for word in sentence:
+        result += np.log(predictions[vocabulary[word]])
+        predictions = generate_p(word)
     return result
+    model.reset_states()
 
 
 def logfactorial(k):
@@ -339,7 +332,7 @@ def initial_proposal(generate_p, vocabulary, inverse_vocabulary, constraint_word
     for _ in range(TRIES):
         constraint_word_positions = sorted((np.random.choice(
             range(length), len(constraint_words), replace=False)))
-        candidate = []
+        candidate = ['START']
         for constraint_word, constraint_word_position in zip(constraint_words + ['DUMMY'], constraint_word_positions + [length]):
             candidate += seeded_predict(generate_p, inverse_vocabulary, 1.0, candidate, constraint_word_position - len(candidate))
             if constraint_word != 'DUMMY':
@@ -468,6 +461,7 @@ texts = get_texts()
 sentences = []
 for text in texts:
     sentences.extend(extract_sentences(text))
+sentences.sort(key=len)
 vocabulary = compute_vocabulary(sentences)
 inverse_vocabulary = invert_vocabulary(vocabulary)
 print_statistics(sentences)
@@ -475,14 +469,12 @@ print_statistics(sentences)
 embedding = load_embedding(vocabulary)
 
 # Constants
-SEQUENCE_LENGTH = 20
 EMBEDDING_DIMENSION = embedding.shape[0]
-LSTM_DIMENSION = 256
+LSTM_DIMENSION = 128
 OUTPUT_DIMENSION = len(vocabulary)
 BEST_CHECKPOINT_FILE = 'weights.best.hdf5'
 BATCH_SIZE = 128
 
-print 'SEQUENCE_LENGTH = %d' % SEQUENCE_LENGTH
 print 'EMBEDDING_DIMENSION = %d' % EMBEDDING_DIMENSION
 print 'LSTM_DIMENSION = %d' % LSTM_DIMENSION
 print 'OUTPUT_DIMENSION = %d' % OUTPUT_DIMENSION
@@ -490,38 +482,64 @@ print 'BATCH_SIZE = %d' % BATCH_SIZE
 
 # Model
 model = Sequential()
-model.add(LSTM(LSTM_DIMENSION, input_shape=(SEQUENCE_LENGTH - 1, EMBEDDING_DIMENSION), consume_less='gpu', stateful=True))
+model.add(LSTM(LSTM_DIMENSION, batch_input_shape=(BATCH_SIZE, 1, EMBEDDING_DIMENSION), consume_less='gpu', stateful=True))
 model.add(Dense(OUTPUT_DIMENSION))
 model.add(Activation('softmax'))
 
 if os.path.isfile(BEST_CHECKPOINT_FILE):
     model.load_weights(BEST_CHECKPOINT_FILE)
 
-best_checkpointer = ModelCheckpoint(BEST_CHECKPOINT_FILE)
-checkpointers = [best_checkpointer]
-
 optimizer = Adam()
 model.compile(loss='categorical_crossentropy', optimizer=optimizer)
 
 if args.action == 'train':
-    sequences = construct_sequences(sentences)
+    #sequences = construct_sequences(sentences)
 
-    embedded_sequences = np.array([
-        np.array(embed_sequence(embedding, vocabulary, sequence))
-        for sequence
-        in sequences
-    ])
+    #embedded_sequences = np.array([
+    #    np.array(embed_sequence(embedding, vocabulary, sequence))
+    #    for sequence
+    #    in sequences
+    #])
 
-    X = embedded_sequences[:, :SEQUENCE_LENGTH - 1, :]
-    y = np.zeros((len(sequences), OUTPUT_DIMENSION))
-    for example_index, sequence in enumerate(sequences):
-        y[example_index, vocabulary[sequence[SEQUENCE_LENGTH - 1]]] = 1
+    #X = embedded_sequences[:, :SEQUENCE_LENGTH - 1, :]
+    #y = np.zeros((len(sequences), OUTPUT_DIMENSION))
+    #for example_index, sequence in enumerate(sequences):
+    #    y[example_index, vocabulary[sequence[SEQUENCE_LENGTH - 1]]] = 1
 
     for iteration in range(1, 500):
-        print 'Iteration %d' % iteration
-        model.fit(X, y, batch_size=64, nb_epoch=1, callbacks=checkpointers)
-        print_some_predictions(generate_p_lstm(model, embedding, vocabulary), vocabulary, inverse_vocabulary)
-        print ''
+        start_sentences = list(range(0, len(sentences), BATCH_SIZE))
+        random.shuffle(start_sentences)
+        for group_index, start_sentence in enumerate(start_sentences):
+            sentences_slice = sentences[start_sentence:start_sentence+BATCH_SIZE]
+            if len(sentences_slice) < BATCH_SIZE:
+               	continue 
+    
+            max_length = max([len(sentence) for sentence in sentences_slice])
+            padded_sentences = [
+                ['START'] + sentence + ['END'] + ['PAD'] * (max_length - len(sentence))
+                for sentence
+                in sentences_slice
+            ]
+            sequence_length = max_length + 2
+    
+            batchX = np.array([
+                [embed(embedding, vocabulary, padded_sentences[sentence_index][word_index])]
+                for word_index in range(sequence_length - 1)
+                for sentence_index in range(BATCH_SIZE)
+            ])
+            batchY = np.zeros((BATCH_SIZE * (sequence_length - 1), OUTPUT_DIMENSION))
+            for sentence_index in range(BATCH_SIZE):
+                sentence = padded_sentences[sentence_index]
+                for word_index in range(1, sequence_length):
+                    batchY[sentence_index + (word_index - 1) * BATCH_SIZE, vocabulary[sentence[word_index]]] = 1.0
+
+	    print 'Iteration %d, group %d/%d' % (iteration, group_index, len(start_sentences)) 
+            print padded_sentences[0]
+	    model.fit(batchX, batchY, batch_size=BATCH_SIZE, nb_epoch=1)
+            model.reset_states()
+	print_some_predictions(generate_p_lstm(model, embedding, vocabulary), vocabulary, inverse_vocabulary)
+	print ''
+        model.save_weights(BEST_CHECKPOINT_FILE)
 
 elif args.action == 'predict':
     print_some_predictions(generate_p_lstm(model, embedding, vocabulary), vocabulary, inverse_vocabulary)
