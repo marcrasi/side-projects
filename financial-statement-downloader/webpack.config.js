@@ -20,9 +20,15 @@ if (fileSystem.existsSync(secretsPath)) {
 
 var options = {
   entry: {
+    adp_workforcenow_content_script: path.join(__dirname, "src", "js", "adp_workforcenow_content_script.js"),
     popup: path.join(__dirname, "src", "js", "popup.js"),
     options: path.join(__dirname, "src", "js", "options.js"),
     background: path.join(__dirname, "src", "js", "background.js")
+  },
+  chromeExtensionBoilerplate: {
+    noHotReload: [
+      "adp_workforcenow_content_script"
+    ]
   },
   output: {
     path: path.join(__dirname, "build"),
@@ -67,11 +73,16 @@ var options = {
       from: "src/manifest.json",
       transform: function (content, path) {
         // generates the manifest file using the package.json informations
-        return Buffer.from(JSON.stringify({
-          description: process.env.npm_package_description,
-          version: process.env.npm_package_version,
-          ...JSON.parse(content.toString())
-        }))
+        const object = {};
+        Object.assign(
+          object,
+          {
+            description: process.env.npm_package_description,
+            version: process.env.npm_package_version
+          },
+          JSON.parse(content.toString())
+        );
+        return Buffer.from(JSON.stringify(object));
       }
     }]),
     new HtmlWebpackPlugin({

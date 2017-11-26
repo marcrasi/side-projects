@@ -12,5 +12,14 @@
     "128": "icon-128.png"
   },
   "manifest_version": 2,
-  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'",
+  "content_scripts": [
+    {
+      "matches": ["https://workforcenow.adp.com/*"],
+      "js": ["adp_workforcenow_content_script.bundle.js"]
+    }
+  ],
+  "permissions": [
+    "downloads"
+  ]
 }
