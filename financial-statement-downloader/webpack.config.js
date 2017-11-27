@@ -23,11 +23,13 @@ var options = {
     adp_workforcenow_content_script: path.join(__dirname, "src", "js", "adp_workforcenow_content_script.js"),
     popup: path.join(__dirname, "src", "js", "popup.js"),
     options: path.join(__dirname, "src", "js", "options.js"),
-    background: path.join(__dirname, "src", "js", "background.js")
+    background: path.join(__dirname, "src", "js", "background.js"),
+    wells_fargo_content_script: path.join(__dirname, "src", "js", "wells_fargo_content_script.js"),
   },
   chromeExtensionBoilerplate: {
     noHotReload: [
-      "adp_workforcenow_content_script"
+      "adp_workforcenow_content_script",
+      "wells_fargo_content_script",
     ]
   },
   output: {

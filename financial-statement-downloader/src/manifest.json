@@ -17,6 +17,10 @@
     {
       "matches": ["https://workforcenow.adp.com/*"],
       "js": ["adp_workforcenow_content_script.bundle.js"]
+    },
+    {
+      "matches": ["https://connect.secure.wellsfargo.com/*"],
+      "js": ["wells_fargo_content_script.bundle.js"]
     }
   ],
   "permissions": [

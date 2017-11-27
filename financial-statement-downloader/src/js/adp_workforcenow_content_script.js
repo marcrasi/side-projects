@@ -4,6 +4,14 @@ console.log('imported adp_workforcenow_content_script');
 
 const pad2 = (numstr) => `00${numstr}`.slice(-2);
 
+/**
+ * We wait a bit for the PDF file to be actually ready.
+ * Is there a more robust way to do this?
+ * It would be nice to somehow validate that the PDF actually
+ * downloaded correctly.
+ */
+const WAIT_FOR_DOWNLOAD_MS = 5000;
+
 setInterval(() => {
   $('iframe').each((index, element) => {
     const src = $(element).prop('src');
@@ -30,6 +38,7 @@ setInterval(() => {
         type: 'requestDownload',
         url: src,
         filename,
+        waitMs: WAIT_FOR_DOWNLOAD_MS,
       });
     }
   });
